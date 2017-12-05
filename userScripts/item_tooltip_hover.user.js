@@ -4,7 +4,7 @@
 // @description Add tooltip on hover to Pendoria Items.
 // @homepage https://trigunshin.github.com/pendoria
 // @version 1
-// @downloadURL https://trigunshin.github.io/pendora/userScripts/item_tooltip_hover.user.js
+// @downloadURL https://trigunshin.github.io/pendoria/userScripts/item_tooltip_hover.user.js
 // @updateURL https://trigunshin.github.io/pendoria/userScripts/item_tooltip_hover.user.js
 // @include https://pendoria.net/game
 // ==/UserScript==
