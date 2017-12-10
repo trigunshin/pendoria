@@ -3,10 +3,14 @@
 // @namespace https://github.com/trigunshin/pendoria
 // @description Output battle stats to JS console. Manually show drops by typing "drops" in console.
 // @homepage https://trigunshin.github.com/pendoria
-// @version 2
+// @version 3
 // @downloadURL https://trigunshin.github.io/pendoria/userScripts/battle_tracker.user.js
 // @updateURL https://trigunshin.github.io/pendoria/userScripts/battle_tracker.user.js
 // @include https://pendoria.net/game
+// @require http://userscripts-mirror.org/scripts/source/107941.user.js
+// @grant GM_setValue
+// @grant GM_getValue
+// @grant GM_deleteValue
 // ==/UserScript==
 
 // moment, $ are already on the page
@@ -14,23 +18,49 @@
 // https://stackoverflow.com/questions/12636613/how-to-calculate-moving-average-without-keeping-the-count-and-data-total
 // New average = old average * (n-1)/n + new value /n
 
-const battleStats = {
-    statDrops: 0,
-    powerDrops: 0,
-    agiDrops: 0,
-    dexDrops: 0,
-    conDrops: 0,
+// check GM_ function compatibility
+// GM_SuperValue.runTestCases(0);
+const GM_STORAGE_KEY = "pendoria_tracker_data";
 
-    averageLifePercent: 0,
-    wins: 0,
-    trackedBattles: 0,
+function getBaseData() {
+    return {
+        trackedEvents: 0,
 
-    drops: 0,
-    spDrops: 0,
-    spDropAvg: 0,
-    rhodiumDrops: 0,
+        statDrops: 0,
+        powerDrops: 0,
+        agiDrops: 0,
+        dexDrops: 0,
+        conDrops: 0,
 
-};
+        averageLifePercent: 0,
+        wins: 0,
+        trackedBattles: 0,
+
+        drops: 0,
+        spDrops: 0,
+        spDropAvg: 0,
+        rhodiumDrops: 0,
+
+        goldTax: 0,
+        xpTax: 0,
+    };
+}
+
+let battleStats = GM_SuperValue.get(GM_STORAGE_KEY) || getBaseData();
+
+function saveData(stats) {
+    GM_SuperValue.set(GM_STORAGE_KEY, stats);
+}
+function clearAllData() {
+    battleStats = getBaseData();
+    saveData(battleStats);
+}
+function clearBattleData() {
+    // not intended to clear drops or stat drops
+    battleStats.averageLifePercent = 0;
+    battleStats.wins = 0;
+    battleStats.trackedBattles = 0;
+}
 
 const dropAmountRegex = / (\d+) /;
 
@@ -50,14 +80,16 @@ function handleDrops(dropString, stats) {
     }
 }
 
-function printResults({trackedBattles, drops, averageLifePercent, wins, statDrops, conDrops, powerDrops, agiDrops, dexDrops, spDrops, spDropAvg, rhodiumDrops}, playerLifePercent) {
+function printResults({trackedBattles, trackedEvents, drops, averageLifePercent, wins, statDrops, conDrops, powerDrops, agiDrops, dexDrops, spDrops, spDropAvg, rhodiumDrops, goldTax, xpTax}, playerLifePercent) {
     console.info(`battles: ${trackedBattles} avgLife%: ${(averageLifePercent*100).toFixed(2)} life%: ${(playerLifePercent*100).toFixed(2)} win%: ${((wins/trackedBattles) *100).toFixed(2)}
-drop%: ${(drops/trackedBattles*100).toFixed(2)} drops: ${drops} spDrops: ${spDrops} spDropAvg: ${spDropAvg} rhoDrops: ${rhodiumDrops} 
-statDrop%: ${((statDrops/trackedBattles) *100).toFixed(2)} conDrop%: ${((conDrops/trackedBattles) *100).toFixed(2)} powDrop%: ${((powerDrops/trackedBattles) *100).toFixed(2)} agiDrop%: ${((agiDrops/trackedBattles) *100).toFixed(2)} dexDrop%: ${((dexDrops/trackedBattles) *100).toFixed(2)}`);
+drop%: ${(drops/trackedEvents*100).toFixed(2)} drops: ${drops} spDrops: ${spDrops} spDropAvg: ${spDropAvg.toFixed(2)} rhoDrops: ${rhodiumDrops} 
+statDrop%: ${((statDrops/trackedEvents) *100).toFixed(2)} conDrop%: ${((conDrops/trackedEvents) *100).toFixed(2)} powDrop%: ${((powerDrops/trackedEvents) *100).toFixed(2)} agiDrop%: ${((agiDrops/trackedEvents) *100).toFixed(2)} dexDrop%: ${((dexDrops/trackedEvents) *100).toFixed(2)}
+goldTax: ${goldTax} xpTax: ${xpTax}`);
 }
 
 function battleTracker(data) {
-    battleStats.trackedBattles += 1;
+    battleStats.trackedEvents += 1;
+    battleStats.trackedBattles += 1; // separate counts so we can clear things like win% separately from (stat) drop%
     if(data.gaineddrops && data.gaineddrops !== "") handleDrops(data.gaineddrops, battleStats);
 
     if(data.gainedAgility) {
@@ -79,11 +111,21 @@ function battleTracker(data) {
 
     if(data.victory) battleStats.wins += 1;
 
+    if(data.guildGain) {
+        if(data.guildGain.gold) battleStats.goldTax += data.guildGain.gold;
+        if(data.guildGain.exp) battleStats.xpTax += data.guildGain.exp;
+    }
+
     const playerLifePercent = (data.playerLife/data.playerMaxLife);
     battleStats.averageLifePercent = battleStats.averageLifePercent * (battleStats.trackedBattles-1)/battleStats.trackedBattles + playerLifePercent/battleStats.trackedBattles;
 
+    saveData(battleStats);
     printResults(battleStats, playerLifePercent);
 }
 
 let battleTrackerFn = battleTracker;
 socket.on('battle data', battleTrackerFn);
+
+unsafeWindow.battleStats = battleStats;
+unsafeWindow.clearAllData = clearAllData;
+unsafeWindow.clearBattleData = clearBattleData;
